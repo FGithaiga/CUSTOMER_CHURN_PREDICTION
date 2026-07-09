@@ -1,15 +1,31 @@
 from flask import Flask, render_template, request, jsonify
 import pandas as pd
 import joblib
+import os
 
 
 app = Flask(__name__)
 
 
-# Load trained pipeline
-model = joblib.load("churn_pipeline.pkl")
+# ==============================
+# Load Machine Learning Pipeline
+# ==============================
+
+MODEL_PATH = "churn_pipeline.pkl"
+
+try:
+    model = joblib.load(MODEL_PATH)
+    print("✅ Model loaded successfully")
+
+except Exception as e:
+    print("❌ Model loading failed:", e)
+    model = None
 
 
+
+# ==============================
+# Home Page
+# ==============================
 
 @app.route("/")
 def home():
@@ -18,21 +34,30 @@ def home():
 
 
 
+# ==============================
+# Prediction API
+# ==============================
+
 @app.route("/predict", methods=["POST"])
 def predict():
 
     try:
 
-        # Get JSON data from frontend
-        data = request.json
+        if model is None:
+            return jsonify({
+                "error": "Machine learning model could not be loaded"
+            })
 
 
-        # Convert JSON to DataFrame
+        # Receive data from JavaScript
+        data = request.get_json()
+
+
+        # Convert to dataframe
         input_data = pd.DataFrame([data])
 
 
-
-        # Ensure correct column order
+        # Expected model features
         expected_features = [
 
             "gender",
@@ -58,7 +83,19 @@ def predict():
         ]
 
 
+        # Ensure correct feature order
         input_data = input_data[expected_features]
+
+
+
+        # Convert numerical columns
+        input_data["SeniorCitizen"] = input_data["SeniorCitizen"].astype(int)
+
+        input_data["tenure"] = input_data["tenure"].astype(int)
+
+        input_data["MonthlyCharges"] = input_data["MonthlyCharges"].astype(float)
+
+        input_data["TotalCharges"] = input_data["TotalCharges"].astype(float)
 
 
 
@@ -66,19 +103,17 @@ def predict():
         prediction = model.predict(input_data)[0]
 
 
-
         # Probability
         probability = model.predict_proba(input_data)[0][1]
 
 
 
-        print("----------------------")
-        print("Input Data:")
+        print("==============================")
+        print("Prediction Input:")
         print(input_data)
-
         print("Prediction:", prediction)
         print("Probability:", probability)
-        print("----------------------")
+        print("==============================")
 
 
 
@@ -94,8 +129,7 @@ def predict():
 
     except Exception as e:
 
-
-        print("ERROR:", e)
+        print("Prediction Error:", e)
 
 
         return jsonify({
@@ -106,7 +140,18 @@ def predict():
 
 
 
+# ==============================
+# Railway Deployment Configuration
+# ==============================
 
 if __name__ == "__main__":
 
-    app.run(debug=True)
+    app.run(
+
+        host="0.0.0.0",
+
+        port=int(os.environ.get("PORT", 5000)),
+
+        debug=False
+
+    )
